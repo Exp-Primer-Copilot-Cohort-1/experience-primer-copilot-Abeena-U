@@ -1,38 +1,61 @@
 //create web server
-const http = require('http');
-const express = require('express');
-const bodyParser = require('body-parser');
-const app = express();
-const fs = require('fs');
+var http = require('http');
+var fs = require('fs');
+var path = require('path');
+var mime = require('mime');
+//var cache = {};
+var chatServer = require('./lib/chat_server');
 
-//create server
-const server = http.createServer(app);
-
-//use body-parser
-app.use(bodyParser.urlencoded({extended: false}));
-
-//create a route
-app.get('/', (req, res) => {
-    res.sendFile(__dirname + '/index.html');
-});
-
-app.get('/new_comment', (req, res) => {
-    res.sendFile(__dirname + '/new_comment.html');
-});
-
-app.post('/create_comment', (req, res) => {
-    const comment = req.body.comment;
-    const name = req.body.name;
-    fs.appendFileSync('comments.txt', name + ' said: ' + comment + '\n');
-    res.redirect('/comments');
-});
-
-app.get('/comments', (req, res) => {
-    const comments = fs.readFileSync('comments.txt', 'utf8');
-    res.send(comments);
+var server = http.createServer(function(request, response){
+	var filePath = false;
+	if(request.url == '/'){
+		filePath = 'public/index.html';
+	} else {
+		filePath = 'public' + request.url;
+	}
+	var absPath = './' + filePath;
+	serveStatic(response, cache, absPath);
 });
 
 //start server
-server.listen(3000, () => {
-    console.log('Server running on port 3000');
+server.listen(3000, function(){
+	console.log("Server listening on port 3000");
 });
+
+//start socket.io server, allowing it to piggyback on the existing http server
+chatServer.listen(server);
+
+//404 error
+function send404(response){
+	response.writeHead(404, {'Content-Type': 'text/plain'});
+	response.write('Error 404: resource not found.');
+	response.end();
+}
+
+//send file data
+function sendFile(response, filePath, fileContents){
+	response.writeHead(200, {"content-type": mime.lookup(path.basename(filePath))});
+	response.end(fileContents);
+}
+
+//serve static files
+function serveStatic(response, cache, absPath){
+	if(cache[absPath]){
+		sendFile(response, absPath, cache[absPath]);
+	} else {
+		fs.exists(absPath, function(exists){
+			if(exists){
+				fs.readFile(absPath, function(err, data){
+					if(err){
+						send404(response);
+					} else {
+						cache[absPath] = data;
+						sendFile(response, absPath, data);
+					}
+				})
+			} else {
+				send404(response);
+			}
+		});
+	}
+}
