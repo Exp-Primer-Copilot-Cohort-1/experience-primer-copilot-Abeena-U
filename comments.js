@@ -1,61 +1,75 @@
-//create web server
-var http = require('http');
-var fs = require('fs');
-var path = require('path');
-var mime = require('mime');
-//var cache = {};
-var chatServer = require('./lib/chat_server');
+//create  web server
+const express = require('express');
+const bodyParser = require('body-parser');
+const app = express();
+const mongoose = require('mongoose');
+const Comment = require('./models/comment');
+const User = require('./models/user');
+const Post = require('./models/post');
+const cors = require('cors');
+const PORT = process.env.PORT || 3000;
 
-var server = http.createServer(function(request, response){
-	var filePath = false;
-	if(request.url == '/'){
-		filePath = 'public/index.html';
-	} else {
-		filePath = 'public' + request.url;
-	}
-	var absPath = './' + filePath;
-	serveStatic(response, cache, absPath);
+//connect to mongodb
+mongoose.connect('mongodb://localhost:27017/meanstack', { useNewUrlParser: true, useUnifiedTopology: true });
+mongoose.connection.on('connected', () => {
+    console.log('Connected to mongodb');
+});
+mongoose.connection.on('error', (err) => {
+    if (err) {
+        console.log('Error in db connection : ' + err);
+    }
 });
 
-//start server
-server.listen(3000, function(){
-	console.log("Server listening on port 3000");
+//middleware
+app.use(cors());
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: false }));
+
+//GET all comments
+app.get('/comments', (req, res, next) => {
+    Comment.find((err, comments) => {
+        if (err) {
+            return res.status(500).json({ msg: err });
+        }
+        return res.json(comments);
+    });
 });
 
-//start socket.io server, allowing it to piggyback on the existing http server
-chatServer.listen(server);
+//GET all comments by post id
+app.get('/comments/:id', (req, res, next) => {
+    Comment.find({ postId: req.params.id }, (err, comments) => {
+        if (err) {
+            return res.status(500).json({ msg: err });
+        }
+        return res.json(comments);
+    });
+});
 
-//404 error
-function send404(response){
-	response.writeHead(404, {'Content-Type': 'text/plain'});
-	response.write('Error 404: resource not found.');
-	response.end();
-}
+//GET comment by id
+app.get('/comment/:id', (req, res, next) => {
+    Comment.findById(req.params.id, (err, comment) => {
+        if (err) {
+            return res.status(500).json({ msg: err });
+        }
+        return res.json(comment);
+    });
+});
 
-//send file data
-function sendFile(response, filePath, fileContents){
-	response.writeHead(200, {"content-type": mime.lookup(path.basename(filePath))});
-	response.end(fileContents);
-}
+//POST comment
+app.post('/comment', (req, res, next) => {
+    const comment = new Comment({
+        postId: req.body.postId,
+        userId: req.body.userId,
+        comment: req.body.comment
+    });
+    comment.save((err, comment) => {
+        if (err) {
+            return res.status(500).json({ msg: err });
+        }
+        return res.json(comment);
+    });
+});
 
-//serve static files
-function serveStatic(response, cache, absPath){
-	if(cache[absPath]){
-		sendFile(response, absPath, cache[absPath]);
-	} else {
-		fs.exists(absPath, function(exists){
-			if(exists){
-				fs.readFile(absPath, function(err, data){
-					if(err){
-						send404(response);
-					} else {
-						cache[absPath] = data;
-						sendFile(response, absPath, data);
-					}
-				})
-			} else {
-				send404(response);
-			}
-		});
-	}
-}
+//PUT comment
+app.put('/comment/:id', (req, res, next) => {
+    Comment.findByIdAndUpdate(req.params.id, req.body, { new: true }, (err, comment) => {var express = require('express');
