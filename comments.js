@@ -1,75 +1,92 @@
-//create  web server
-const express = require('express');
-const bodyParser = require('body-parser');
-const app = express();
-const mongoose = require('mongoose');
-const Comment = require('./models/comment');
-const User = require('./models/user');
-const Post = require('./models/post');
-const cors = require('cors');
-const PORT = process.env.PORT || 3000;
+//Create web server
+var express = require('express');
+var app = express();
 
-//connect to mongodb
-mongoose.connect('mongodb://localhost:27017/meanstack', { useNewUrlParser: true, useUnifiedTopology: true });
-mongoose.connection.on('connected', () => {
-    console.log('Connected to mongodb');
+//Create server
+var server = require('http').createServer(app);
+
+//Create socket io
+var io = require('socket.io')(server);
+
+//Create mongoose
+var mongoose = require('mongoose');
+
+//Connect to database
+mongoose.connect('mongodb://localhost:27017/chatbox', {useNewUrlParser: true});
+
+//Create schema
+var chatSchema = mongoose.Schema({
+    nick: String,
+    msg: String,
+    created: {type: Date, default: Date.now}
 });
-mongoose.connection.on('error', (err) => {
-    if (err) {
-        console.log('Error in db connection : ' + err);
-    }
+
+//Create model
+var Chat = mongoose.model('Message', chatSchema);
+
+//Get index.html
+app.get('/', function(req, res){
+    res.sendFile(__dirname + '/index.html');
 });
 
-//middleware
-app.use(cors());
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: false }));
-
-//GET all comments
-app.get('/comments', (req, res, next) => {
-    Comment.find((err, comments) => {
-        if (err) {
-            return res.status(500).json({ msg: err });
-        }
-        return res.json(comments);
+//Get data from database
+app.get('/messages', function(req, res){
+    Chat.find({}, function(err, messages){
+        res.send(messages);
     });
 });
 
-//GET all comments by post id
-app.get('/comments/:id', (req, res, next) => {
-    Comment.find({ postId: req.params.id }, (err, comments) => {
-        if (err) {
-            return res.status(500).json({ msg: err });
-        }
-        return res.json(comments);
+//Get user from database
+app.get('/users', function(req, res){
+    User.find({}, function(err, users){
+        res.send(users);
     });
 });
 
-//GET comment by id
-app.get('/comment/:id', (req, res, next) => {
-    Comment.findById(req.params.id, (err, comment) => {
-        if (err) {
-            return res.status(500).json({ msg: err });
-        }
-        return res.json(comment);
+//Get user from database
+app.get('/users/:id', function(req, res){
+    User.find({_id: req.params.id}, function(err, users){
+        res.send(users);
     });
 });
 
-//POST comment
-app.post('/comment', (req, res, next) => {
-    const comment = new Comment({
-        postId: req.body.postId,
-        userId: req.body.userId,
-        comment: req.body.comment
-    });
-    comment.save((err, comment) => {
-        if (err) {
-            return res.status(500).json({ msg: err });
-        }
-        return res.json(comment);
+//Get user from database
+app.get('/users/:nick', function(req, res){
+    User.find({nick: req.params.nick}, function(err, users){
+        res.send(users);
     });
 });
 
-//PUT comment
-app.put('/comment/:id', (req, res, next) => {
-    Comment.findByIdAndUpdate(req.params.id, req.body, { new: true }, (err, comment) => {var express = require('express');
+//Get user from database
+app.get('/users/:nick/:pass', function(req, res){
+    User.find({nick: req.params.nick, pass: req.params.pass}, function(err, users){
+        res.send(users);
+    });
+});
+
+//Create user schema
+var userSchema = mongoose.Schema({
+    nick: String,
+    pass: String,
+    created: {type: Date, default: Date.now}
+});
+
+//Create user model
+var User = mongoose.model('User', userSchema);
+
+//Create user
+app.post('/users', function(req, res){
+    var user = new User(req.body);
+    user.save(function(err){
+        if(err) throw err;
+        io.emit('user', req.body);
+        res.sendStatus(200);
+    });
+});
+
+//Create message
+app.post('/messages', function(req, res){
+    var message = new Chat(req.body);
+    message.save(function(err){
+        if(err) throw err;
+        io.emit('message', req.body);
